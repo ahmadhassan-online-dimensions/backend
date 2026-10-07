@@ -13,6 +13,7 @@ import cartRoutes from "./routes/cartRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 import {errorHandler, notFound} from "./middleware/errorMiddleware.js";
 
 const app = express();
@@ -31,6 +32,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/newsletter", newsletterRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

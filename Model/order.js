@@ -47,6 +47,13 @@ const orderSchema = mongoose.Schema({
         default:"pending"
     },
 
+    // what the shop does after payment (admin panel)
+    fulfillment:{
+        type:String,
+        enum:["processing","shipped","delivered"],
+        default:"processing"
+    },
+
     paymentProvider:{
         type:String,
         default:"2checkout"
