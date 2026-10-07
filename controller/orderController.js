@@ -49,7 +49,8 @@ export const checkout = expressAsyncHandler(async (req, res) => {
         product: l.product._id,
         name: l.product.name,
         price: l.product.price,
-        quantity: l.quantity
+        quantity: l.quantity,
+        checkoutCode: l.product.checkoutCode
     }));
 
     const order = await Order.create({

@@ -29,9 +29,9 @@ export const getProducts = expressAsyncHandler(async (req, res) => {
 
 export const addProduct = expressAsyncHandler(async (req, res) => {
 
-    const { name, description, price, category, stock } = req.body;
+    const { name, description, price, category, stock, checkoutCode } = req.body;
 
-    const product = await Product.create({ name, description, price, category, stock });
+    const product = await Product.create({ name, description, price, category, stock, checkoutCode });
 
     res.status(201).json({
         status: "OK",
@@ -88,6 +88,7 @@ export const updateProduct = expressAsyncHandler(async (req, res) => {
     product.price = req.body.price ?? product.price;
     product.category = req.body.category ?? product.category;
     product.stock = req.body.stock ?? product.stock;
+    product.checkoutCode = req.body.checkoutCode ?? product.checkoutCode;
 
     const updatedProduct = await product.save();
 

@@ -28,6 +28,12 @@ const productschema = mongoose.Schema({
         type:Number,
         default:0,
         min:0
+    },
+
+    // product code created in the 2Checkout panel (Setup > Products); enables catalog checkout
+    checkoutCode:{
+        type:String,
+        trim:true
     }
 
 },{

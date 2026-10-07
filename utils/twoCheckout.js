@@ -17,46 +17,93 @@ const safeEqual = (a, b) => {
     return x.length === y.length && crypto.timingSafeEqual(x, y);
 };
 
+// buy links are signed with the buy-link secret word; the account Secret key is accepted as a fallback
+const buyLinkSecret = () => process.env.TWOCHECKOUT_BUYLINK_SECRET || process.env.TWOCHECKOUT_SECRET_KEY;
+
 export const isConfigured = () =>
-    Boolean(process.env.TWOCHECKOUT_MERCHANT_CODE && process.env.TWOCHECKOUT_BUYLINK_SECRET);
+    Boolean(process.env.TWOCHECKOUT_MERCHANT_CODE && buyLinkSecret());
 
 // ---- Buy link (ConvertPlus hosted checkout) ----
 
-// signature = HMAC-SHA256(secret, serialised params sorted by name, signature excluded)
+// 2Checkout only signs these buy-link parameters. merchant, dynamic, test, email, ... must NOT be
+// part of the signature, otherwise 2Checkout rejects it and opens an empty cart.
+const SIGNED_PARAMS = [
+    "currency", "prod", "price", "qty", "tangible", "type", "opt", "description",
+    "recurrence", "duration", "renewal-price", "item-ext-ref",
+    "return-url", "return-type", "expiration", "order-ext-ref", "customer-ref", "customer-ext-ref", "lock"
+];
+
+// signature = HMAC-SHA256(buy-link secret word, serialised signed params sorted by name)
 export const signBuyLinkParams = (params, secret) => {
     const payload = Object.keys(params)
+        .filter((k) => SIGNED_PARAMS.includes(k))
         .sort()
         .map((k) => ser(params[k]))
         .join("");
     return crypto.createHmac("sha256", secret).update(payload).digest("hex");
 };
 
+// 2Checkout's firewall answers "Error 15 / Access denied" to buy links whose return-url points at
+// localhost, 127.x, or a private LAN address. Only send return-url when it is a public address.
+const isPublicUrl = (value) => {
+    try {
+        const { hostname, protocol } = new URL(value);
+        if (!["http:", "https:"].includes(protocol)) return false;
+        if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) return false;
+        if (/^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(hostname)) return false;
+        if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
+        if (hostname === "::1" || hostname === "[::1]") return false;
+        return true;
+    } catch {
+        return false;
+    }
+};
+
 const clean = (text) => String(text).replace(/[;&=]/g, " ").trim();
 
 export const buildBuyLink = (order, user) => {
+    // Catalog mode: every product has a code created in the 2Checkout panel -> link by code.
+    // Otherwise dynamic mode: the product name and price travel inside the (signed) link.
+    const catalog = order.items.every((i) => i.checkoutCode);
+
     const params = {
         merchant: process.env.TWOCHECKOUT_MERCHANT_CODE,
-        dynamic: "1",
         currency: order.currency,
-        prod: order.items.map((i) => clean(i.name)).join(";"),
-        price: order.items.map((i) => i.price.toFixed(2)).join(";"),
-        qty: order.items.map((i) => i.quantity).join(";"),
-        type: order.items.map(() => "PRODUCT").join(";"),
-        tangible: order.items.map(() => "1").join(";"),
+        ...(catalog
+            ? {
+                prod: order.items.map((i) => i.checkoutCode).join(";"),
+                qty: order.items.map((i) => i.quantity).join(";")
+            }
+            : {
+                dynamic: "1",
+                prod: order.items.map((i) => clean(i.name)).join(";"),
+                price: order.items.map((i) => i.price.toFixed(2)).join(";"),
+                qty: order.items.map((i) => i.quantity).join(";"),
+                type: order.items.map(() => "PRODUCT").join(";"),
+                tangible: "1" // a single boolean for the whole cart: physical delivery
+            }),
         "order-ext-ref": order._id.toString(),
         "customer-ext-ref": user._id.toString(),
-        email: user.email,
-        "return-url": process.env.PAYMENT_RETURN_URL,
-        "return-type": "redirect"
+        email: user.email
     };
+
+    if (isPublicUrl(process.env.PAYMENT_RETURN_URL)) {
+        params["return-url"] = process.env.PAYMENT_RETURN_URL;
+        params["return-type"] = "redirect";
+    }
 
     if (process.env.TWOCHECKOUT_TEST_MODE !== "false") {
         params.test = "1";
     }
 
-    params.signature = signBuyLinkParams(params, process.env.TWOCHECKOUT_BUYLINK_SECRET);
+    params.signature = signBuyLinkParams(params, buyLinkSecret());
 
-    return `${CHECKOUT_URL}?${new URLSearchParams(params).toString()}`;
+    // %20 (not "+") for spaces so the value 2Checkout decodes is exactly the value that was signed
+    const query = Object.entries(params)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("&");
+
+    return `${CHECKOUT_URL}?${query}`;
 };
 
 // ---- IPN (server-to-server notification) ----

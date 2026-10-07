@@ -7,6 +7,12 @@ import Product from "../Model/product.js";
 dns.setDefaultResultOrder("ipv4first");
 dns.setServers((process.env.DNS_SERVERS || "8.8.8.8,1.1.1.1").split(",").map((s) => s.trim()));
 
+// Optional: TWOCHECKOUT_CODE_MODEL_01 / TWOCHECKOUT_CODE_MODEL_02 = product codes from the 2Checkout panel
+const CODES = {
+    "Model 01": process.env.TWOCHECKOUT_CODE_MODEL_01,
+    "Model 02": process.env.TWOCHECKOUT_CODE_MODEL_02
+};
+
 const PRODUCTS = [
     {
         name: "Model 01",
@@ -28,10 +34,17 @@ await mongoose.connect(process.env.MONGOURL);
 
 for (const p of PRODUCTS) {
     const exists = await Product.findOne({ name: p.name });
+    const code = CODES[p.name];
     if (exists) {
-        console.log(`${p.name}: already exists, skipped`);
+        if (code && exists.checkoutCode !== code) {
+            exists.checkoutCode = code;
+            await exists.save();
+            console.log(`${p.name}: checkout code set`);
+        } else {
+            console.log(`${p.name}: already exists, skipped`);
+        }
     } else {
-        await Product.create(p);
+        await Product.create({ ...p, checkoutCode: code });
         console.log(`${p.name}: created`);
     }
 }
