@@ -17,9 +17,25 @@ const userSchema = mongoose.Schema({
         match:[/^\S+@\S+\.\S+$/, "Invalid email address"]
     },
 
+    // accounts created with Google / Apple have no password
     password:{
         type:String,
-        required:true,
+        required:function () { return !this.googleId && !this.appleId; },
+        select:false
+    },
+
+    // the provider's stable user id ("sub" claim), used to recognise the same person next time
+    googleId:{
+        type:String,
+        unique:true,
+        sparse:true,
+        select:false
+    },
+
+    appleId:{
+        type:String,
+        unique:true,
+        sparse:true,
         select:false
     },
 
@@ -33,6 +49,8 @@ const userSchema = mongoose.Schema({
     toJSON:{
         transform:(doc, ret) => {
             delete ret.password;
+            delete ret.googleId;
+            delete ret.appleId;
             delete ret.__v;
             return ret;
         }
